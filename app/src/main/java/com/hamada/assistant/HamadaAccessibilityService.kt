@@ -57,14 +57,19 @@ class HamadaAccessibilityService : AccessibilityService() {
   if (text.isNotBlank()) out.append(text).append("\n") else if (desc.isNotBlank()) out.append(desc).append("\n")
   for (i in 0 until node.childCount) collectText(node.getChild(i), out)
  }
+ private fun normalizeForMatch(value: String): String = value.lowercase()
+  .replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+  .replace("ى", "ي").replace("ة", "ه")
+  .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+  .replace(Regex("\\s+"), " ").trim()
  fun clickVisibleText(target: String): Boolean {
   val root = rootInActiveWindow ?: return false
-  return clickMatchingNode(root, target.trim().lowercase())
+  return clickMatchingNode(root, normalizeForMatch(target))
  }
  private fun clickMatchingNode(node: AccessibilityNodeInfo?, target: String): Boolean {
   if (node == null) return false
-  val text = (node.text?.toString() ?: node.contentDescription?.toString()).orEmpty()
-  if (text.lowercase().contains(target) && node.isVisibleToUser) {
+  val text = normalizeForMatch((node.text?.toString() ?: node.contentDescription?.toString()).orEmpty())
+  if (text.contains(target) && node.isVisibleToUser) {
    var candidate: AccessibilityNodeInfo? = node
    while (candidate != null) {
     if (candidate.isVisibleToUser && candidate.isClickable) {
