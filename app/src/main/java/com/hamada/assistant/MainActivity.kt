@@ -58,6 +58,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var apiBaseUrl by mutableStateOf("")
  private var apiKey by mutableStateOf("")
  private var apiModel by mutableStateOf("")
+ private var availableModels by mutableStateOf(listOf<String>())
+ private var loadingModels by mutableStateOf(false)
+ private var modelsError by mutableStateOf("")
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -432,7 +435,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
 private data class AppEntry(val label: String, val packageName: String)
 
-@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit, recordingRoutine: Boolean, recordingName: String, savedRoutineNames: List<String>, onAiSettings: () -> Unit, onCloseAiSettings: () -> Unit, showAiSettings: Boolean, apiBaseUrl: String, onBaseUrlChange: (String) -> Unit, apiKey: String, onApiKeyChange: (String) -> Unit, apiModel: String, onApiModelChange: (String) -> Unit, onSaveAiSettings: (String, String, String) -> Unit) {
+@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit, recordingRoutine: Boolean, recordingName: String, savedRoutineNames: List<String>, onAiSettings: () -> Unit, onCloseAiSettings: () -> Unit, showAiSettings: Boolean, apiBaseUrl: String, onBaseUrlChange: (String) -> Unit, apiKey: String, onApiKeyChange: (String) -> Unit, apiModel: String, onApiModelChange: (String) -> Unit, onSaveAiSettings: (String, String, String) -> Unit, availableModels: List<String>, loadingModels: Boolean, modelsError: String, onFetchModels: (String, String) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
   Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
