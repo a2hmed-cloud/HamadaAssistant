@@ -34,6 +34,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var speechResult by mutableStateOf("اضغط زر الميكروفون الأزرق وقل: يا حمادة، افتح يوتيوب")
  private var status by mutableStateOf("جاهز — اضغط الميكروفون للتحدث")
  private var listening by mutableStateOf(false)
+ private var screenText by mutableStateOf("لسه ما قريناش الشاشة.")
+ private var clickTarget by mutableStateOf("")
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -79,7 +81,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     HamadaScreen(speechResult, status, listening, {
      if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening()
      else askMic.launch(Manifest.permission.RECORD_AUDIO)
-    }, { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
+    }, { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+     { screenText = HamadaAccessibilityService.readCurrentScreen() ?: "فعّل خدمة حمادة من إعدادات إمكانية الوصول، وبعدها ارجع واضغط اقرأ الشاشة." ; status = if (HamadaAccessibilityService.readCurrentScreen() == null) "خدمة التحكم بالشاشة مش مفعّلة" else "تم جلب نص الشاشة" ; speak(screenText.take(250)) },
+     { target -> val result = HamadaAccessibilityService.clickText(target); status = when (result) { true -> "حاولت أضغط على: $target"; false -> "ملقتش زر قابل للضغط اسمه: $target"; null -> "فعّل خدمة حمادة من إعدادات إمكانية الوصول الأول" }; speak(status) },
+     screenText, clickTarget, { clickTarget = it })
    }
   }
  }
@@ -136,7 +141,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  override fun onDestroy() { speechRecognizer?.destroy(); tts?.stop(); tts?.shutdown(); super.onDestroy() }
 }
 
-@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit) {
+@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
   Row(Modifier.fillMaxSize().background(bg).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -154,7 +159,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
      Text(if (listening) "🎙  بسمعك... اضغط للتجربة تاني" else "🎙  اضغط هنا واتكلم", fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
     Spacer(Modifier.height(6.dp))
-    OutlinedButton(onClick = onAccessibility) { Text("إعداد التحكم بالشاشة") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+     OutlinedButton(onClick = onAccessibility) { Text("تفعيل عين حمادة") }
+     Button(onClick = onReadScreen) { Text("اقرأ الشاشة") }
+    }
+    OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
+    Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold)
+    Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
+     Text(screenText, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(8.dp), maxLines = 7)
+    }
    }
    Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Text("جرّب تقول", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold)
