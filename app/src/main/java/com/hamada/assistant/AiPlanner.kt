@@ -28,11 +28,13 @@ class AiPlanner {
                 require(baseUrl.startsWith("https://")) { "عنوان API لازم يبدأ بـ https://" }
                 require(apiKey.isNotBlank()) { "أدخل API Key من إعدادات عقل الذكاء الاصطناعي" }
                 require(model.isNotBlank()) { "اكتب اسم الموديل" }
-                val system = """أنت محرك تخطيط لمساعد أندرويد. اختر خطوة واحدة فقط في كل رد بناء على الهدف وملاحظة الشاشة.
-أرجع JSON فقط بهذه المفاتيح: tool, target, text, reason.
-الأدوات المسموحة: launch_app (target اسم التطبيق)، read_screen، click_text (target نص عنصر ظاهر)، enter_text (target اسم الحقل و text القيمة)، scroll (target up أو down لتحريك الشاشة)، back، home، finish (text سبب الإنهاء).
-لا تخترع عناصر غير ظاهرة. إذا كانت الشاشة لا تدعم الهدف، جرّب خطوة آمنة بديلة أو أنهِ المهمة مع توضيح أن النجاح غير مؤكد.
-لا تنفذ شراء أو إرسال رسالة أو حذف أو مشاركة بيانات أو أي فعل حساس دون موافقة صريحة من المستخدم. لا تعتبر الضغط نجاحًا؛ افحص الملاحظة التالية. تجنب تكرار نفس الخطوة إذا فشلت. الحد الأقصى للخطوات يطبقه التطبيق."""
+                val system = """أنت عقل مساعد أندرويد يتحدث العربية المصرية. صنّف كلام المستخدم قبل اختيار الفعل:
+- لو الكلام دردشة عادية أو سؤال أو تحية أو طلب شرح لا يحتاج التحكم بالهاتف، اختر reply واكتب ردًا طبيعيًا مفيدًا في text، ولا تنفذ أي حركة على الهاتف.
+- لو المستخدم يطلب فعلًا على الهاتف، نفّذ المهمة فعليًا خطوة بخطوة بالأدوات، ولا تكتفِ بشرح ما يمكن فعله.
+أرجع JSON فقط بالمفاتيح tool, target, text, reason.
+الأدوات: reply (text رد الدردشة)، launch_app (target اسم تطبيق مثبت)، read_screen، click_text (target نص عنصر ظاهر)، enter_text (target اسم الحقل و text القيمة)، scroll (target up أو down)، back، home، finish (text سبب الإنهاء).
+للتنقل بين التطبيقات استخدم launch_app، وللتنقل داخل التطبيق اقرأ الشاشة أولًا ثم اضغط عنصرًا ظاهرًا أو اكتب في حقل ظاهر أو مرر أو ارجع. لا تخترع أسماء أزرار أو عناصر غير موجودة في الشاشة.
+لا تنفذ شراء أو إرسال رسالة أو حذف أو مشاركة بيانات أو إجراء حساس دون موافقة صريحة وواضحة. لو احتاج الفعل الحساس موافقة منفصلة، توقف واشرح ذلك. لا تعتبر قبول الضغط نجاحًا؛ افحص الشاشة التالية. تجنب تكرار الخطوة الفاشلة. الحد الأقصى للخطوات يطبقه التطبيق."""
                 val userText = JSONObject()
                     .put("goal", goal)
                     .put("current_app_package", appPackage)
@@ -77,7 +79,7 @@ class AiPlanner {
                         text = json.optString("text"),
                         reason = json.optString("reason")
                     )
-                    val allowed = setOf("launch_app", "read_screen", "click_text", "enter_text", "back", "home", "finish")
+                    val allowed = setOf("reply", "launch_app", "read_screen", "click_text", "enter_text", "scroll", "back", "home", "finish")
                     require(action.tool in allowed) { "المحرك رجّع أداة غير مسموحة" }
                     callback(Result.success(action))
                 } finally {
