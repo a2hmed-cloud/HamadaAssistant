@@ -303,6 +303,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
   if (runId != agentRunId || !agentRunning) return
   aiStepCount++
   val description = when (action.tool) {
+   "reply" -> {
+    val reply = action.text.trim()
+    if (reply.isBlank()) { finishAgent("مش قادر أجهز رد مفهوم؛ جرّب صياغة الكلام مرة تانية."); return }
+    finishAgent(reply)
+    return
+   }
    "launch_app" -> {
     val wanted = normalizeCommand(action.target)
     val app = installedApps.firstOrNull { normalizeCommand(it.label).contains(wanted) || wanted.contains(normalizeCommand(it.label)) }
