@@ -435,9 +435,9 @@ private data class AppEntry(val label: String, val packageName: String)
 @Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit, recordingRoutine: Boolean, recordingName: String, savedRoutineNames: List<String>, onAiSettings: () -> Unit, onCloseAiSettings: () -> Unit, showAiSettings: Boolean, apiBaseUrl: String, onBaseUrlChange: (String) -> Unit, apiKey: String, onApiKeyChange: (String) -> Unit, apiModel: String, onApiModelChange: (String) -> Unit, onSaveAiSettings: (String, String, String) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
-  Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+  Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-    Text("حمادة", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF))
+    Text("حمادة", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF))
     Text("مساعدك الشخصي", color = Color(0xFF9DB8D8), fontSize = 14.sp)
     Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
     Text(speech, color = Color.White, fontSize = 16.sp, maxLines = 2)
@@ -449,10 +449,10 @@ private data class AppEntry(val label: String, val packageName: String)
      OutlinedButton(onClick = onAccessibility) { Text("تفعيل عين حمادة") }
      Button(onClick = onReadScreen) { Text("اقرأ الشاشة") }
     }
-    OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم العنصر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
-    OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("اعرف التطبيقات الموجودة على الموبايل") }
-    OutlinedButton(onClick = onAiSettings, modifier = Modifier.fillMaxWidth()) { Text("إعدادات عقل الذكاء الاصطناعي") }
+    OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("التطبيقات") }
+    OutlinedButton(onClick = onAiSettings, modifier = Modifier.fillMaxWidth()) { Text("إعدادات AI") }
     Text(if (recordingRoutine) "تسجيل روتين: $recordingName — قول خلص الروتين" else "الروتينات المحفوظة: ${savedRoutineNames.joinToString().ifBlank { "لا يوجد" }}", color = Color(0xFF70F0C0), fontSize = 11.sp)
     Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
