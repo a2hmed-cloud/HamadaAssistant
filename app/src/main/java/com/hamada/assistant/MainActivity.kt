@@ -131,6 +131,17 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private fun handleCommand(raw: String) {
   val c = raw.lowercase(Locale("ar","EG")).replace("يا حمادة","").trim()
   when {
+   c.contains("اقرأ الشاشة") || c.contains("اقرا الشاشة") || c.contains("اقرألي الشاشة") || c.contains("اقرالي الشاشة") -> {
+    val captured = HamadaAccessibilityService.readLastExternalScreen()
+    if (captured != null) {
+     screenText = captured
+     status = "دي آخر شاشة رصدها حمادة من تطبيق تاني"
+     speak("دي النصوص اللي قدرت أقرأها من آخر تطبيق. " + captured.take(220))
+    } else {
+     status = "لسه مفيش شاشة من تطبيق تاني اتقرت"
+     speak("فعّل عين حمادة من إمكانية الوصول، افتح التطبيق اللي عايزني أقرأه، وبعدها ارجع وقول اقرأ الشاشة.")
+    }
+   }
    c.contains("افتح") && (c.contains("يوتيوب") || c.contains("youtube")) -> launchPackage("com.google.android.youtube","حاضر، بفتح يوتيوب.")
    c.contains("افتح") && (c.contains("واتساب") || c.contains("whatsapp")) -> launchPackage("com.whatsapp","حاضر، بفتح واتساب.")
    c.contains("افتح") && (c.contains("سبوتيفاي") || c.contains("spotify")) -> launchPackage("com.spotify.music","حاضر، بفتح سبوتيفاي.")
