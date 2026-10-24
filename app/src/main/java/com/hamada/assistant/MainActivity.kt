@@ -13,6 +13,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +49,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
   if (SpeechRecognizer.isRecognitionAvailable(this)) {
    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-    override fun onReadyForSpeech(params: Bundle?) { status = "سامعك يا معلم، اتكلم دلوقتي" }
+    override fun onReadyForSpeech(params: Bundle?) { status = "سامعك يا معلم، اتكلم دلوقتي"; speak("سامعك يا معلم، اتكلم دلوقتي") }
     override fun onBeginningOfSpeech() { status = "بسمعك..." }
     override fun onRmsChanged(rmsdB: Float) {}
     override fun onBufferReceived(buffer: ByteArray?) {}
@@ -55,11 +57,15 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     override fun onError(error: Int) {
      listening = false
      status = when (error) {
-      SpeechRecognizer.ERROR_NO_MATCH -> "ملقتش كلام واضح، جرّب تاني"
-      SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ماسمعتش كلام، اضغط الميكروفون وجرب"
-      SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "اسمح لحمادة باستخدام الميكروفون"
-      else -> "التعرف على الصوت وقف، جرّب تاني"
+      SpeechRecognizer.ERROR_NO_MATCH -> "مسمعتش كلام واضح. قرّب من الموبايل وجرّب تاني."
+      SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "مستني صوتك؛ اضغط الميكروفون واتكلم بعد ما يقول سامعك."
+      SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "إذن الميكروفون مش متاح لحمادة."
+      SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "التعرف على الصوت مشغول؛ استنى ثانية وجرب."
+      SpeechRecognizer.ERROR_NETWORK -> "خدمة Google أو الإنترنت مش متاحين دلوقتي."
+      SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "الاتصال بخدمة الصوت اتأخر. جرّب تاني."
+      else -> "خدمة الصوت رجعت خطأ رقم $error. جرّب تاني."
      }
+     speak(status)
     }
     override fun onResults(results: Bundle?) {
      listening = false
@@ -110,10 +116,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ar-EG")
     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
    }
    speechResult = "اتكلم يا معلم..."
-   status = "بفتح الميكروفون"
+   status = "بشغّل خدمة التعرّف على الكلام..."
    listening = true
    recognizer.startListening(intent)
   } catch (_: Exception) {
@@ -144,28 +150,23 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 @Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
-  Row(Modifier.fillMaxSize().background(bg).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-   Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+  Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+   Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
     Text("حمادة", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF))
     Text("مساعدك الشخصي", color = Color(0xFF9DB8D8), fontSize = 14.sp)
-    Spacer(Modifier.height(12.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
-    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
     Text(speech, color = Color.White, fontSize = 16.sp, maxLines = 2)
-    Spacer(Modifier.height(5.dp))
-    Text(status, color = if (listening) Color(0xFF70F0C0) else Color(0xFF79BFFF), fontSize = 13.sp, maxLines = 2)
-    Spacer(Modifier.height(10.dp))
+    Text(status, color = if (listening) Color(0xFF70F0C0) else Color(0xFF79BFFF), fontSize = 12.sp, maxLines = 2)
     Button(onClick = onListen, modifier = Modifier.height(58.dp), shape = RoundedCornerShape(30.dp), colors = ButtonDefaults.buttonColors(containerColor = if (listening) Color(0xFFB3261E) else Color(0xFF087CFA))) {
      Text(if (listening) "🎙  بسمعك... اضغط للتجربة تاني" else "🎙  اضغط هنا واتكلم", fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
-    Spacer(Modifier.height(6.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
      OutlinedButton(onClick = onAccessibility) { Text("تفعيل عين حمادة") }
      Button(onClick = onReadScreen) { Text("اقرأ الشاشة") }
     }
     OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
-    Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold)
+    Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
      Text(screenText, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(8.dp), maxLines = 7)
     }
