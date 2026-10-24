@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -28,50 +30,151 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var tts: TextToSpeech? = null
- private var speechResult by mutableStateOf("اضغط الميكروفون وقل: يا حمادة، افتح يوتيوب")
- private var status by mutableStateOf("جاهز")
- private val askSpeech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-  val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-  if (!spoken.isNullOrBlank()) { speechResult = spoken; handleCommand(spoken) } else status = "لم أستقبل كلامًا واضحًا"
+ private var speechRecognizer: SpeechRecognizer? = null
+ private var speechResult by mutableStateOf("اضغط زر الميكروفون الأزرق وقل: يا حمادة، افتح يوتيوب")
+ private var status by mutableStateOf("جاهز — اضغط الميكروفون للتحدث")
+ private var listening by mutableStateOf(false)
+
+ private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+  if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
  }
- private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) startListening() else speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
+
  override fun onCreate(savedInstanceState: Bundle?) {
-  super.onCreate(savedInstanceState); tts = TextToSpeech(this, this)
-  setContent { MaterialTheme(colorScheme = darkColorScheme()) { HamadaScreen(speechResult, status, { if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening() else askMic.launch(Manifest.permission.RECORD_AUDIO) }, { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) } }
+  super.onCreate(savedInstanceState)
+  tts = TextToSpeech(this, this)
+  if (SpeechRecognizer.isRecognitionAvailable(this)) {
+   speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+   speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+    override fun onReadyForSpeech(params: Bundle?) { status = "سامعك يا معلم، اتكلم دلوقتي" }
+    override fun onBeginningOfSpeech() { status = "بسمعك..." }
+    override fun onRmsChanged(rmsdB: Float) {}
+    override fun onBufferReceived(buffer: ByteArray?) {}
+    override fun onEndOfSpeech() { listening = false; status = "بحاول أفهم كلامك..." }
+    override fun onError(error: Int) {
+     listening = false
+     status = when (error) {
+      SpeechRecognizer.ERROR_NO_MATCH -> "ملقتش كلام واضح، جرّب تاني"
+      SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ماسمعتش كلام، اضغط الميكروفون وجرب"
+      SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "اسمح لحمادة باستخدام الميكروفون"
+      else -> "التعرف على الصوت وقف، جرّب تاني"
+     }
+    }
+    override fun onResults(results: Bundle?) {
+     listening = false
+     val spoken = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+     if (!spoken.isNullOrBlank()) { speechResult = spoken; handleCommand(spoken) }
+     else status = "ماوصلنيش كلام واضح"
+    }
+    override fun onPartialResults(partialResults: Bundle?) {
+     val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+     if (!partial.isNullOrBlank()) speechResult = partial
+    }
+    override fun onEvent(eventType: Int, params: Bundle?) {}
+   })
+  } else {
+   status = "خدمة التعرف على الصوت مش متاحة على الجهاز"
+  }
+  setContent {
+   MaterialTheme(colorScheme = darkColorScheme()) {
+    HamadaScreen(speechResult, status, listening, {
+     if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startListening()
+     else askMic.launch(Manifest.permission.RECORD_AUDIO)
+    }, { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) })
+   }
+  }
  }
- override fun onInit(result: Int) { if (result == TextToSpeech.SUCCESS) { val ar = tts?.setLanguage(Locale("ar","EG")) ?: TextToSpeech.LANG_NOT_SUPPORTED; if (ar == TextToSpeech.LANG_NOT_SUPPORTED || ar == TextToSpeech.LANG_MISSING_DATA) tts?.setLanguage(Locale.US) } }
+
+ override fun onInit(result: Int) {
+  if (result == TextToSpeech.SUCCESS) {
+   val ar = tts?.setLanguage(Locale("ar", "EG")) ?: TextToSpeech.LANG_NOT_SUPPORTED
+   if (ar == TextToSpeech.LANG_NOT_SUPPORTED || ar == TextToSpeech.LANG_MISSING_DATA) tts?.setLanguage(Locale.US)
+  }
+ }
+
  private fun startListening() {
-  val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply { putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM); putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG"); putExtra(RecognizerIntent.EXTRA_PROMPT, "اتكلم يا معلم") }
-  try { askSpeech.launch(intent) } catch (_: Exception) { status = "خدمة التعرف على الصوت غير موجودة على الجهاز"; speak("التعرف على الصوت مش متوفر على الموبايل ده.") }
+  val recognizer = speechRecognizer
+  if (recognizer == null) {
+   status = "خدمة التعرف على الصوت مش متاحة على الجهاز"
+   speak("التعرف على الصوت مش متوفر على الموبايل ده.")
+   return
+  }
+  try {
+   val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ar-EG")
+    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ar-EG")
+    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+   }
+   speechResult = "اتكلم يا معلم..."
+   status = "بفتح الميكروفون"
+   listening = true
+   recognizer.startListening(intent)
+  } catch (_: Exception) {
+   listening = false
+   status = "مش قادر أبدأ التعرف على الصوت على الجهاز ده"
+  }
  }
+
  private fun handleCommand(raw: String) {
   val c = raw.lowercase(Locale("ar","EG")).replace("يا حمادة","").trim()
   when {
    c.contains("افتح") && (c.contains("يوتيوب") || c.contains("youtube")) -> launchPackage("com.google.android.youtube","حاضر، بفتح يوتيوب.")
    c.contains("افتح") && (c.contains("واتساب") || c.contains("whatsapp")) -> launchPackage("com.whatsapp","حاضر، بفتح واتساب.")
    c.contains("افتح") && (c.contains("سبوتيفاي") || c.contains("spotify")) -> launchPackage("com.spotify.music","حاضر، بفتح سبوتيفاي.")
-   c.contains("إعدادات") || c.contains("الاعدادات") -> { status = "فتح الإعدادات"; startActivity(Intent(Settings.ACTION_SETTINGS)); speak("حاضر، بفتح الإعدادات.") }
+   c.contains("إعدادات") || c.contains("الاعدادات") || c.contains("الإعدادات") -> { status = "فتح الإعدادات"; startActivity(Intent(Settings.ACTION_SETTINGS)); speak("حاضر، بفتح الإعدادات.") }
    else -> { status = "الأمر ده لسه مش مضاف في الإصدار الأول"; speak("سمعتك. الأمر ده لسه بنتعلمه في الإصدار الأول.") }
   }
  }
- private fun launchPackage(pkg: String, message: String) { val i = packageManager.getLaunchIntentForPackage(pkg); if (i != null) { status = message; speak(message); startActivity(i) } else { status = "التطبيق مش متثبت على الموبايل"; speak("التطبيق ده مش متثبت على الموبايل.") } }
+ private fun launchPackage(pkg: String, message: String) {
+  val i = packageManager.getLaunchIntentForPackage(pkg)
+  if (i != null) { status = message; speak(message); startActivity(i) }
+  else { status = "التطبيق مش متثبت على الموبايل"; speak("التطبيق ده مش متثبت على الموبايل.") }
+ }
  private fun speak(text: String) { tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "hamada-response") }
- override fun onDestroy() { tts?.stop(); tts?.shutdown(); super.onDestroy() }
+ override fun onDestroy() { speechRecognizer?.destroy(); tts?.stop(); tts?.shutdown(); super.onDestroy() }
 }
 
-@Composable private fun HamadaScreen(speech: String, status: String, onListen: () -> Unit, onAccessibility: () -> Unit) {
+@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
-  Row(Modifier.fillMaxSize().background(bg).padding(20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+  Row(Modifier.fillMaxSize().background(bg).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-    Text("حمادة", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF)); Text("مساعدك الشخصي", color = Color(0xFF9DB8D8), fontSize = 14.sp)
-    Spacer(Modifier.height(18.dp)); Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
-    Spacer(Modifier.height(18.dp)); Text(speech, color = Color.White, fontSize = 17.sp, maxLines = 2); Spacer(Modifier.height(6.dp)); Text(status, color = Color(0xFF79BFFF), fontSize = 13.sp); Spacer(Modifier.height(14.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Button(onClick = onListen) { Text("🎙 اتكلم مع حمادة") }; OutlinedButton(onClick = onAccessibility) { Text("تفعيل التحكم بالشاشة") } }
+    Text("حمادة", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF))
+    Text("مساعدك الشخصي", color = Color(0xFF9DB8D8), fontSize = 14.sp)
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(22.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
+    Spacer(Modifier.height(12.dp))
+    Text(speech, color = Color.White, fontSize = 16.sp, maxLines = 2)
+    Spacer(Modifier.height(5.dp))
+    Text(status, color = if (listening) Color(0xFF70F0C0) else Color(0xFF79BFFF), fontSize = 13.sp, maxLines = 2)
+    Spacer(Modifier.height(10.dp))
+    Button(onClick = onListen, modifier = Modifier.height(58.dp), shape = RoundedCornerShape(30.dp), colors = ButtonDefaults.buttonColors(containerColor = if (listening) Color(0xFFB3261E) else Color(0xFF087CFA))) {
+     Text(if (listening) "🎙  بسمعك... اضغط للتجربة تاني" else "🎙  اضغط هنا واتكلم", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+    }
+    Spacer(Modifier.height(6.dp))
+    OutlinedButton(onClick = onAccessibility) { Text("إعداد التحكم بالشاشة") }
    }
-   Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) { QuickItem("افتح يوتيوب"); QuickItem("افتح واتساب"); QuickItem("افتح سبوتيفاي"); QuickItem("افتح الإعدادات"); Text("الإصدار 0.1", color = Color.Gray, fontSize = 11.sp) }
+   Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Text("جرّب تقول", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold)
+    QuickItem("افتح يوتيوب")
+    QuickItem("افتح واتساب")
+    QuickItem("افتح سبوتيفاي")
+    QuickItem("افتح الإعدادات")
+    Text("الإصدار 0.2", color = Color.Gray, fontSize = 11.sp)
+   }
   }
  }
 }
-@Composable private fun RobotEye() { Box(Modifier.size(width=100.dp,height=122.dp).background(Color(0xFF061C3D),RoundedCornerShape(50)).padding(7.dp).background(Brush.radialGradient(listOf(Color(0xFF8AE6FF),Color(0xFF168BFF),Color(0xFF06306F))),CircleShape), contentAlignment=Alignment.Center) { Box(Modifier.size(47.dp).background(Color(0xFF020817),CircleShape)); Box(Modifier.offset(x=13.dp,y=(-13).dp).size(13.dp).background(Color.White,CircleShape)) } }
-@Composable private fun QuickItem(text: String) { Surface(color=Color(0xFF0A1A31),shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth()) { Text(text,color=Color(0xFFB9DFFF),fontSize=12.sp,modifier=Modifier.padding(10.dp)) } }
+@Composable private fun RobotEye() {
+ Box(Modifier.size(width=88.dp,height=108.dp).background(Color(0xFF061C3D),RoundedCornerShape(50)).padding(7.dp).background(Brush.radialGradient(listOf(Color(0xFF8AE6FF),Color(0xFF168BFF),Color(0xFF06306F))),CircleShape), contentAlignment=Alignment.Center) {
+  Box(Modifier.size(43.dp).background(Color(0xFF020817),CircleShape))
+  Box(Modifier.offset(x=12.dp,y=(-12).dp).size(12.dp).background(Color.White,CircleShape))
+ }
+}
+@Composable private fun QuickItem(text: String) {
+ Surface(color=Color(0xFF0A1A31),shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth()) {
+  Text(text,color=Color(0xFFB9DFFF),fontSize=12.sp,modifier=Modifier.padding(10.dp))
+ }
+}
