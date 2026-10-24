@@ -30,7 +30,7 @@ class AiPlanner {
                 require(model.isNotBlank()) { "اكتب اسم الموديل" }
                 val system = """أنت محرك تخطيط لمساعد أندرويد. اختر خطوة واحدة فقط في كل رد بناء على الهدف وملاحظة الشاشة.
 أرجع JSON فقط بهذه المفاتيح: tool, target, text, reason.
-الأدوات المسموحة: launch_app (target اسم التطبيق)، read_screen، click_text (target نص عنصر ظاهر)، enter_text (target اسم الحقل و text القيمة)، back، home، finish (text سبب الإنهاء).
+الأدوات المسموحة: launch_app (target اسم التطبيق)، read_screen، click_text (target نص عنصر ظاهر)، enter_text (target اسم الحقل و text القيمة)، scroll (target up أو down لتحريك الشاشة)، back، home، finish (text سبب الإنهاء).
 لا تخترع عناصر غير ظاهرة. إذا كانت الشاشة لا تدعم الهدف، جرّب خطوة آمنة بديلة أو أنهِ المهمة مع توضيح أن النجاح غير مؤكد.
 لا تنفذ شراء أو إرسال رسالة أو حذف أو مشاركة بيانات أو أي فعل حساس دون موافقة صريحة من المستخدم. لا تعتبر الضغط نجاحًا؛ افحص الملاحظة التالية. تجنب تكرار نفس الخطوة إذا فشلت. الحد الأقصى للخطوات يطبقه التطبيق."""
                 val userText = JSONObject()
