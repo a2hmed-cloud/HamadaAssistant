@@ -128,10 +128,21 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
   }
  }
 
+ private fun normalizeCommand(raw: String): String {
+  return raw.lowercase(Locale("ar", "EG"))
+   .replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+   .replace("ى", "ي").replace("ة", "ه")
+   .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+   .replace("يا حماده", "")
+   .replace(Regex("[،,.!?؟:;]+"), " ")
+   .replace(Regex("\\s+"), " ")
+   .trim()
+ }
+
  private fun handleCommand(raw: String) {
-  val c = raw.lowercase(Locale("ar","EG")).replace("يا حمادة","").trim()
+  val c = normalizeCommand(raw)
   when {
-   c.contains("اقرأ الشاشة") || c.contains("اقرا الشاشة") || c.contains("اقرألي الشاشة") || c.contains("اقرالي الشاشة") -> {
+   c.contains("اقرا") && (c.contains("شاشه") || c.contains("الشاشه")) -> {
     val captured = HamadaAccessibilityService.readLastExternalScreen()
     if (captured != null) {
      screenText = captured
@@ -142,31 +153,49 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
      speak("فعّل عين حمادة من إمكانية الوصول، افتح التطبيق اللي عايزني أقرأه، وبعدها ارجع وقول اقرأ الشاشة.")
     }
    }
-   c.contains("ارجع") || c.contains("رجوع") || c == "back" -> {
+   c.contains("ارجع") || c.contains("رجوع") || c == "back" || c.contains("الصفحه اللي فاتت") -> {
     val result = HamadaAccessibilityService.goBack()
-    status = if (result == true) "رجعت خطوة" else "فعّل عين حمادة عشان أقدر أرجع"
+    status = if (result == true) "أندرويد قبل أمر الرجوع" else "الرجوع مش متاح؛ فعّل عين حمادة"
     speak(status)
    }
-   c.contains("الشاشة الرئيسية") || c == "روح للرئيسية" || c == "home" -> {
+   c.contains("الشاشه الرئيسيه") || c.contains("روح للرئيسيه") || c == "home" || c.contains("افتح الهوم") -> {
     val result = HamadaAccessibilityService.goHome()
-    status = if (result == true) "فتحت الشاشة الرئيسية" else "فعّل عين حمادة عشان أقدر أروح للرئيسية"
+    status = if (result == true) "أندرويد قبل أمر الشاشة الرئيسية" else "مش قادر أروح للرئيسية؛ فعّل عين حمادة"
     speak(status)
    }
-   c.startsWith("اضغط على ") || c.startsWith("دوس على ") || c.startsWith("اكبس على ") -> {
-    val target = c.removePrefix("اضغط على ").removePrefix("دوس على ").removePrefix("اكبس على ").removePrefix("زر ").trim()
-    val result = HamadaAccessibilityService.clickText(target)
-    status = when (result) {
-     true -> "نفذت محاولة الضغط على $target"
-     false -> "مش لاقي عنصر ظاهر اسمه $target"
-     null -> "فعّل عين حمادة من إعدادات إمكانية الوصول الأول"
+   c.startsWith("اضغط") || c.startsWith("دوس") || c.startsWith("اكبس") || c.startsWith("انقر") -> {
+    val target = c
+     .removePrefix("اضغط على ").removePrefix("اضغط ").removePrefix("دوس على ").removePrefix("دوس ")
+     .removePrefix("اكبس على ").removePrefix("اكبس ").removePrefix("انقر على ").removePrefix("انقر ")
+     .removePrefix("على ").removePrefix("زر ").trim()
+    if (target.isBlank()) {
+     status = "قول اسم العنصر بعد كلمة اضغط، زي اضغط على بحث"
+     speak(status)
+    } else {
+     val result = HamadaAccessibilityService.clickText(target)
+     status = when (result) {
+      true -> "أندرويد قبل محاولة الضغط على $target؛ راجع الشاشة للتأكد"
+      false -> "مش لاقي عنصر ظاهر اسمه $target"
+      null -> "فعّل عين حمادة من إعدادات إمكانية الوصول الأول"
+     }
+     speak(status)
     }
-    speak(status)
    }
-   c.contains("افتح") && (c.contains("يوتيوب") || c.contains("youtube")) -> launchPackage("com.google.android.youtube","حاضر، بفتح يوتيوب.")
-   c.contains("افتح") && (c.contains("واتساب") || c.contains("whatsapp")) -> launchPackage("com.whatsapp","حاضر، بفتح واتساب.")
-   c.contains("افتح") && (c.contains("سبوتيفاي") || c.contains("spotify")) -> launchPackage("com.spotify.music","حاضر، بفتح سبوتيفاي.")
-   c.contains("إعدادات") || c.contains("الاعدادات") || c.contains("الإعدادات") -> { status = "فتح الإعدادات"; startActivity(Intent(Settings.ACTION_SETTINGS)); speak("حاضر، بفتح الإعدادات.") }
-   else -> { status = "الأمر ده لسه مش مضاف في الإصدار الأول"; speak("سمعتك. الأمر ده لسه بنتعلمه في الإصدار الأول.") }
+   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("يوتيوب") || c.contains("youtube")) ->
+    launchPackage("com.google.android.youtube", "حاضر، بفتح يوتيوب.")
+   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("واتساب") || c.contains("whatsapp")) ->
+    launchPackage("com.whatsapp", "حاضر، بفتح واتساب.")
+   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("سبوتيفاي") || c.contains("spotify")) ->
+    launchPackage("com.spotify.music", "حاضر، بفتح سبوتيفاي.")
+   c.contains("اعدادات") || c.contains("الاعدادات") -> {
+    status = "بفتح إعدادات أندرويد"
+    speak(status)
+    startActivity(Intent(Settings.ACTION_SETTINGS))
+   }
+   else -> {
+    status = "فهمت الكلام، لكن الأمر ده مش مدعوم لسه"
+    speak("فهمت كلامك، بس لسه ما ضفتش تنفيذ الأمر ده. جرب افتح يوتيوب، ارجع، أو اضغط على بحث.")
+   }
   }
  }
  private fun launchPackage(pkg: String, message: String) {
