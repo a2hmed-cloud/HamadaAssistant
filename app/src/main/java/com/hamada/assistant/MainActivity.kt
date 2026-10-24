@@ -481,6 +481,9 @@ private data class AppEntry(val label: String, val packageName: String)
      OutlinedTextField(value = draftBase, onValueChange = { draftBase = it }, label = { Text("عنوان API الأساسي") }, placeholder = { Text("https://api.openai.com/v1") }, singleLine = true)
      OutlinedTextField(value = draftKey, onValueChange = { draftKey = it }, label = { Text("API Key") }, placeholder = { Text("ضع المفتاح هنا") }, singleLine = true)
      OutlinedTextField(value = draftModel, onValueChange = { draftModel = it }, label = { Text("اسم الموديل") }, placeholder = { Text("gpt-4o-mini") }, singleLine = true)
+     Button(onClick = { onFetchModels(draftBase, draftKey) }, enabled = !loadingModels, modifier = Modifier.fillMaxWidth()) { Text(if (loadingModels) "جاري جلب الموديلات..." else "جلب الموديلات المتاحة") }
+     if (modelsError.isNotBlank()) Text(modelsError, color = if (availableModels.isNotEmpty()) Color(0xFF70F0C0) else MaterialTheme.colorScheme.error, fontSize = 12.sp)
+     if (availableModels.isNotEmpty()) { Column(Modifier.heightIn(max = 140.dp).verticalScroll(rememberScrollState())) { availableModels.forEach { model -> TextButton(onClick = { draftModel = model }, modifier = Modifier.fillMaxWidth()) { Text(if (draftModel == model) "✓ $model" else model) } } } }
      Text("لا تضع /chat/completions في العنوان؛ اكتب العنوان الأساسي الذي ينتهي عادةً بـ /v1.", color = Color.Gray, fontSize = 11.sp)
     }
    }, confirmButton = { TextButton(onClick = { onSaveAiSettings(draftBase, draftKey, draftModel) }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = onCloseAiSettings) { Text("إلغاء") } })
