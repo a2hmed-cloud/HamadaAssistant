@@ -19,6 +19,11 @@ class HamadaAccessibilityService : AccessibilityService() {
    if (target.isBlank()) return false
    return service.clickVisibleText(target)
   }
+  fun enterText(target: String, value: String): Boolean? {
+   val service = activeService ?: return null
+   if (target.isBlank() || value.isBlank()) return false
+   return service.enterTextIntoVisibleField(target, value)
+  }
  }
  override fun onServiceConnected() {
   super.onServiceConnected()
@@ -65,6 +70,20 @@ class HamadaAccessibilityService : AccessibilityService() {
  fun clickVisibleText(target: String): Boolean {
   val root = rootInActiveWindow ?: return false
   return clickMatchingNode(root, normalizeForMatch(target))
+ }
+ fun enterTextIntoVisibleField(target: String, value: String): Boolean {
+  val root = rootInActiveWindow ?: return false
+  return setTextMatchingNode(root, normalizeForMatch(target), value)
+ }
+ private fun setTextMatchingNode(node: AccessibilityNodeInfo?, target: String, value: String): Boolean {
+  if (node == null) return false
+  val label = normalizeForMatch((node.text?.toString() ?: node.contentDescription?.toString() ?: node.viewIdResourceName.orEmpty()))
+  if (node.isVisibleToUser && node.isEditable && (label.contains(target) || target.contains(label) || target == "حقل" || target == "بحث")) {
+   val args = android.os.Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value) }
+   if (node.performAction(AccessibilityNodeInfo.ACTION_FOCUS) && node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return true
+  }
+  for (i in 0 until node.childCount) if (setTextMatchingNode(node.getChild(i), target, value)) return true
+  return false
  }
  private fun clickMatchingNode(node: AccessibilityNodeInfo?, target: String): Boolean {
   if (node == null) return false
