@@ -1,0 +1,33 @@
+package com.hamada.assistant
+
+import android.accessibilityservice.AccessibilityService
+import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
+
+class HamadaAccessibilityService : AccessibilityService() {
+ override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+ override fun onInterrupt() {}
+ fun readVisibleText(): String {
+  val root = rootInActiveWindow ?: return "مش قادر أقرأ الشاشة الحالية."
+  val out = StringBuilder(); collectText(root, out)
+  return out.toString().ifBlank { "مش لاقي نص واضح على الشاشة." }
+ }
+ private fun collectText(node: AccessibilityNodeInfo?, out: StringBuilder) {
+  if (node == null) return
+  val text = node.text?.toString()?.trim().orEmpty()
+  val desc = node.contentDescription?.toString()?.trim().orEmpty()
+  if (text.isNotBlank()) out.append(text).append("\\n") else if (desc.isNotBlank()) out.append(desc).append("\\n")
+  for (i in 0 until node.childCount) collectText(node.getChild(i), out)
+ }
+ fun clickVisibleText(target: String): Boolean {
+  val root = rootInActiveWindow ?: return false
+  return clickMatchingNode(root, target.trim().lowercase())
+ }
+ private fun clickMatchingNode(node: AccessibilityNodeInfo?, target: String): Boolean {
+  if (node == null) return false
+  val text = (node.text?.toString() ?: node.contentDescription?.toString()).orEmpty()
+  if (text.lowercase().contains(target) && node.isVisibleToUser && node.isClickable) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+  for (i in 0 until node.childCount) if (clickMatchingNode(node.getChild(i), target)) return true
+  return false
+ }
+}
