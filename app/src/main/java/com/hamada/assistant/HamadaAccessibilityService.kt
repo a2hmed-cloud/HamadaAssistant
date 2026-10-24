@@ -7,7 +7,11 @@ import android.view.accessibility.AccessibilityNodeInfo
 class HamadaAccessibilityService : AccessibilityService() {
  companion object {
   @Volatile private var activeService: HamadaAccessibilityService? = null
+  @Volatile private var lastExternalScreen: String = ""
+  @Volatile private var lastExternalPackage: String = ""
   fun readCurrentScreen(): String? = activeService?.readVisibleText()
+  fun readLastExternalScreen(): String? = lastExternalScreen.takeIf { it.isNotBlank() }
+  fun lastExternalApp(): String = lastExternalPackage
   fun clickText(target: String): Boolean? {
    val service = activeService ?: return null
    if (target.isBlank()) return false
@@ -22,7 +26,21 @@ class HamadaAccessibilityService : AccessibilityService() {
   if (activeService === this) activeService = null
   super.onDestroy()
  }
- override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+ override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+  val pkg = event?.packageName?.toString().orEmpty()
+  if (pkg.isBlank() || pkg == packageName) return
+  if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+      event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+   val root = rootInActiveWindow ?: return
+   val out = StringBuilder()
+   collectText(root, out)
+   val captured = out.toString().trim()
+   if (captured.isNotBlank()) {
+    lastExternalScreen = captured.take(5000)
+    lastExternalPackage = pkg
+   }
+  }
+ }
  override fun onInterrupt() {}
  fun readVisibleText(): String {
   val root = rootInActiveWindow ?: return "مش قادر أقرأ الشاشة الحالية."
