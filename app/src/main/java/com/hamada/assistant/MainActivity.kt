@@ -50,6 +50,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private val routineHandler = Handler(Looper.getMainLooper())
  private var agentRunId = 0
  private var agentRunning = false
+ private var showAiSettings by mutableStateOf(false)
+ private var apiBaseUrl by mutableStateOf("")
+ private var apiKey by mutableStateOf("")
+ private var apiModel by mutableStateOf("")
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -60,6 +64,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
   tts = TextToSpeech(this, this)
   refreshAppList()
   refreshRoutineNames()
+  val aiPrefs = getSharedPreferences("hamada_ai", MODE_PRIVATE)
+  apiBaseUrl = aiPrefs.getString("base_url", "https://api.openai.com/v1") ?: "https://api.openai.com/v1"
+  apiKey = aiPrefs.getString("api_key", "") ?: ""
+  apiModel = aiPrefs.getString("model", "gpt-4o-mini") ?: "gpt-4o-mini"
   if (SpeechRecognizer.isRecognitionAvailable(this)) {
    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
@@ -105,7 +113,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
      { screenText = HamadaAccessibilityService.readCurrentScreen() ?: "فعّل خدمة حمادة من إعدادات إمكانية الوصول، وبعدها ارجع واضغط اقرأ الشاشة." ; status = if (HamadaAccessibilityService.readCurrentScreen() == null) "خدمة التحكم بالشاشة مش مفعّلة" else "تم جلب نص الشاشة" ; speak(screenText.take(250)) },
      { target -> val result = HamadaAccessibilityService.clickText(target); status = when (result) { true -> "حاولت أضغط على: $target"; false -> "ملقتش زر قابل للضغط اسمه: $target"; null -> "فعّل خدمة حمادة من إعدادات إمكانية الوصول الأول" }; speak(status) },
      screenText, clickTarget, { clickTarget = it },
-     { refreshAppList(); showApps = true }, installedApps, showApps, { showApps = it }, recordingRoutine, recordingName, savedRoutineNames)
+     { refreshAppList(); showApps = true }, installedApps, showApps, { showApps = it }, recordingRoutine, recordingName, savedRoutineNames, { showAiSettings = true }, showAiSettings, apiBaseUrl, { apiBaseUrl = it }, apiKey, { apiKey = it }, apiModel, { apiModel = it }, { base, key, model -> apiBaseUrl = base.trim().trimEnd('/'); apiKey = key.trim(); apiModel = model.trim(); getSharedPreferences("hamada_ai", MODE_PRIVATE).edit().putString("base_url", apiBaseUrl).putString("api_key", apiKey).putString("model", apiModel).apply(); showAiSettings = false; status = "تم حفظ إعدادات محرك الذكاء الاصطناعي على الجهاز"; speak(status) })
    }
   }
  }
@@ -339,7 +347,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
 private data class AppEntry(val label: String, val packageName: String)
 
-@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit, recordingRoutine: Boolean, recordingName: String, savedRoutineNames: List<String>) {
+@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit, recordingRoutine: Boolean, recordingName: String, savedRoutineNames: List<String>, onAiSettings: () -> Unit, showAiSettings: Boolean, apiBaseUrl: String, onBaseUrlChange: (String) -> Unit, apiKey: String, onApiKeyChange: (String) -> Unit, apiModel: String, onApiModelChange: (String) -> Unit, onSaveAiSettings: (String, String, String) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
   Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -359,6 +367,7 @@ private data class AppEntry(val label: String, val packageName: String)
     OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
     OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("اعرف التطبيقات الموجودة على الموبايل") }
+    OutlinedButton(onClick = onAiSettings, modifier = Modifier.fillMaxWidth()) { Text("إعدادات عقل الذكاء الاصطناعي") }
     Text(if (recordingRoutine) "تسجيل روتين: $recordingName — قول خلص الروتين" else "الروتينات المحفوظة: ${savedRoutineNames.joinToString().ifBlank { "لا يوجد" }}", color = Color(0xFF70F0C0), fontSize = 11.sp)
     Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
@@ -373,6 +382,20 @@ private data class AppEntry(val label: String, val packageName: String)
     QuickItem("افتح الإعدادات")
     Text("الإصدار 0.2", color = Color.Gray, fontSize = 11.sp)
    }
+  }
+  if (showAiSettings) {
+   var draftBase by remember(showAiSettings) { mutableStateOf(apiBaseUrl) }
+   var draftKey by remember(showAiSettings) { mutableStateOf(apiKey) }
+   var draftModel by remember(showAiSettings) { mutableStateOf(apiModel) }
+   AlertDialog(onDismissRequest = onAiSettings, title = { Text("إعدادات محرك الذكاء الاصطناعي") }, text = {
+    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+     Text("أدخل بيانات مزود متوافق مع OpenAI API. المفتاح يُحفظ محليًا على الجهاز؛ لا تشارك ملف التطبيق أو جهازك مع أحد تثق به.", color = Color.LightGray, fontSize = 12.sp)
+     OutlinedTextField(value = draftBase, onValueChange = { draftBase = it }, label = { Text("عنوان API الأساسي") }, placeholder = { Text("https://api.openai.com/v1") }, singleLine = true)
+     OutlinedTextField(value = draftKey, onValueChange = { draftKey = it }, label = { Text("API Key") }, placeholder = { Text("ضع المفتاح هنا") }, singleLine = true)
+     OutlinedTextField(value = draftModel, onValueChange = { draftModel = it }, label = { Text("اسم الموديل") }, placeholder = { Text("gpt-4o-mini") }, singleLine = true)
+     Text("لا تضع /chat/completions في العنوان؛ اكتب العنوان الأساسي الذي ينتهي عادةً بـ /v1.", color = Color.Gray, fontSize = 11.sp)
+    }
+   }, confirmButton = { TextButton(onClick = { onSaveAiSettings(draftBase, draftKey, draftModel) }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = onAiSettings) { Text("إلغاء") } })
   }
   if (showApps) {
    AlertDialog(onDismissRequest = { setShowApps(false) }, title = { Text("التطبيقات المتاحة على الجهاز (${installedApps.size})") }, text = {
