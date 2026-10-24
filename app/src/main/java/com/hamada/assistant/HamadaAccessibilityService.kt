@@ -1,6 +1,8 @@
 package com.hamada.assistant
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
@@ -14,6 +16,7 @@ class HamadaAccessibilityService : AccessibilityService() {
   fun lastExternalApp(): String = lastExternalPackage
   fun goBack(): Boolean? = activeService?.performGlobalAction(GLOBAL_ACTION_BACK)
   fun goHome(): Boolean? = activeService?.performGlobalAction(GLOBAL_ACTION_HOME)
+  fun scroll(direction: String): Boolean? = activeService?.scrollScreen(direction)
   fun clickText(target: String): Boolean? {
    val service = activeService ?: return null
    if (target.isBlank()) return false
@@ -50,6 +53,19 @@ class HamadaAccessibilityService : AccessibilityService() {
   }
  }
  override fun onInterrupt() {}
+ fun scrollScreen(direction: String): Boolean {
+  val normalized = direction.lowercase()
+  if (normalized !in setOf("up", "down")) return false
+  val metrics = resources.displayMetrics
+  val x = metrics.widthPixels * 0.5f
+  val startY = if (normalized == "down") metrics.heightPixels * 0.78f else metrics.heightPixels * 0.28f
+  val endY = if (normalized == "down") metrics.heightPixels * 0.28f else metrics.heightPixels * 0.78f
+  val path = Path().apply { moveTo(x, startY); lineTo(x, endY) }
+  val gesture = GestureDescription.Builder()
+   .addStroke(GestureDescription.StrokeDescription(path, 0, 420))
+   .build()
+  return dispatchGesture(gesture, null, null)
+ }
  fun readVisibleText(): String {
   val root = rootInActiveWindow ?: return "مش قادر أقرأ الشاشة الحالية."
   val out = StringBuilder(); collectText(root, out)
