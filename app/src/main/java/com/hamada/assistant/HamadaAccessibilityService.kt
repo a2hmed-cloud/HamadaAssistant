@@ -43,7 +43,15 @@ class HamadaAccessibilityService : AccessibilityService() {
  private fun clickMatchingNode(node: AccessibilityNodeInfo?, target: String): Boolean {
   if (node == null) return false
   val text = (node.text?.toString() ?: node.contentDescription?.toString()).orEmpty()
-  if (text.lowercase().contains(target) && node.isVisibleToUser && node.isClickable) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+  if (text.lowercase().contains(target) && node.isVisibleToUser) {
+   var candidate: AccessibilityNodeInfo? = node
+   while (candidate != null) {
+    if (candidate.isVisibleToUser && candidate.isClickable) {
+     if (candidate.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+    }
+    candidate = candidate.parent
+   }
+  }
   for (i in 0 until node.childCount) if (clickMatchingNode(node.getChild(i), target)) return true
   return false
  }
