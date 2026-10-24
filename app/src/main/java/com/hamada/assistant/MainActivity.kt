@@ -442,7 +442,7 @@ private data class AppEntry(val label: String, val packageName: String)
    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
     Text("حمادة", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color(0xFF66C7FF))
     Text("مساعدك الشخصي", color = Color(0xFF9DB8D8), fontSize = 14.sp)
-    Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
+    Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) { RobotEye(); RobotEye() }
     Text(speech, color = Color.White, fontSize = 16.sp, maxLines = 2)
     Text(status, color = if (listening) Color(0xFF70F0C0) else Color(0xFF79BFFF), fontSize = 12.sp, maxLines = 2)
     Button(onClick = onListen, modifier = Modifier.height(58.dp), shape = RoundedCornerShape(30.dp), colors = ButtonDefaults.buttonColors(containerColor = if (listening) Color(0xFFB3261E) else Color(0xFF087CFA))) {
@@ -452,8 +452,7 @@ private data class AppEntry(val label: String, val packageName: String)
      OutlinedButton(onClick = onAccessibility) { Text("تفعيل عين حمادة") }
      Button(onClick = onReadScreen) { Text("اقرأ الشاشة") }
     }
-    OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم العنصر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
+    
     OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("التطبيقات") }
     OutlinedButton(onClick = onAiSettings, modifier = Modifier.fillMaxWidth()) { Text("إعدادات AI") }
     Text(if (recordingRoutine) "تسجيل روتين: $recordingName — قول خلص الروتين" else "الروتينات المحفوظة: ${savedRoutineNames.joinToString().ifBlank { "لا يوجد" }}", color = Color(0xFF70F0C0), fontSize = 11.sp)
@@ -498,8 +497,8 @@ private data class AppEntry(val label: String, val packageName: String)
  }
 }
 @Composable private fun RobotEye() {
- Box(Modifier.size(width=88.dp,height=108.dp).background(Color(0xFF061C3D),RoundedCornerShape(50)).padding(7.dp).background(Brush.radialGradient(listOf(Color(0xFF8AE6FF),Color(0xFF168BFF),Color(0xFF06306F))),CircleShape), contentAlignment=Alignment.Center) {
-  Box(Modifier.size(43.dp).background(Color(0xFF020817),CircleShape))
+ Box(Modifier.size(width=100.dp,height=118.dp).background(Color(0xFF061C3D),RoundedCornerShape(50)).padding(7.dp).background(Brush.radialGradient(listOf(Color(0xFF8AE6FF),Color(0xFF168BFF),Color(0xFF06306F))),CircleShape), contentAlignment=Alignment.Center) {
+  Box(Modifier.size(49.dp).background(Color(0xFF020817),CircleShape))
   Box(Modifier.offset(x=12.dp,y=(-12).dp).size(12.dp).background(Color.White,CircleShape))
  }
 }
