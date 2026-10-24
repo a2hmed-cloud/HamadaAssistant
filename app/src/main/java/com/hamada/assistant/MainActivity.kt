@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import org.json.JSONArray
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -40,6 +43,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var clickTarget by mutableStateOf("")
  private var showApps by mutableStateOf(false)
  private var installedApps by mutableStateOf(listOf<AppEntry>())
+ private var recordingRoutine by mutableStateOf(false)
+ private var recordingName by mutableStateOf("")
+ private var savedRoutineNames by mutableStateOf(listOf<String>())
+ private val routineSteps = mutableListOf<String>()
+ private val routineHandler = Handler(Looper.getMainLooper())
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -49,6 +57,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
   super.onCreate(savedInstanceState)
   tts = TextToSpeech(this, this)
   refreshAppList()
+  refreshRoutineNames()
   if (SpeechRecognizer.isRecognitionAvailable(this)) {
    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
@@ -145,7 +154,29 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
  private fun handleCommand(raw: String) {
   val c = normalizeCommand(raw)
+  if (recordingRoutine) {
+   if (c == "خلص الروتين" || c == "انهي الروتين") {
+    recordingRoutine = false
+    getSharedPreferences("hamada_routines", MODE_PRIVATE).edit().putString(recordingName, JSONArray(routineSteps).toString()).apply()
+    refreshRoutineNames()
+    status = "حفظت الروتين $recordingName وفيه ${routineSteps.size} خطوات"
+    speak(status)
+   } else {
+    routineSteps.add(raw)
+    status = "سجلت خطوة ${routineSteps.size}. قول الأمر التالي أو خلص الروتين"
+    speak(status)
+   }
+   return
+  }
   when {
+   c.startsWith("احفظ روتين ") || c.startsWith("سجل روتين ") -> {
+    recordingName = c.removePrefix("احفظ روتين ").removePrefix("سجل روتين ").trim()
+    if (recordingName.isBlank()) { status = "قول اسم الروتين"; speak(status) }
+    else { routineSteps.clear(); recordingRoutine = true; status = "بدأت تسجيل $recordingName. قل الأوامر بالترتيب ثم قول خلص الروتين"; speak(status) }
+   }
+   c.startsWith("شغل روتين ") || c.startsWith("نفذ روتين ") -> {
+    runRoutine(c.removePrefix("شغل روتين ").removePrefix("نفذ روتين ").trim())
+   }
    c.contains("اقرا") && (c.contains("شاشه") || c.contains("الشاشه")) -> {
     val captured = HamadaAccessibilityService.readLastExternalScreen()
     if (captured != null) {
@@ -205,6 +236,16 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
    }
   }
  }
+ private fun refreshRoutineNames() { savedRoutineNames = getSharedPreferences("hamada_routines", MODE_PRIVATE).all.keys.sorted() }
+ private fun runRoutine(name: String) {
+  val stored = getSharedPreferences("hamada_routines", MODE_PRIVATE).getString(name, null)
+  if (stored == null) { status = "مش لاقي روتين اسمه $name"; speak(status); return }
+  val steps = try { val arr = JSONArray(stored); (0 until arr.length()).map { arr.getString(it) } } catch (_: Exception) { emptyList() }
+  if (steps.isEmpty()) { status = "الروتين فاضي"; speak(status); return }
+  status = "بدأت تنفيذ الروتين $name، وعدد الخطوات ${steps.size}"
+  speak(status)
+  steps.forEachIndexed { index, step -> routineHandler.postDelayed({ status = "الخطوة ${index + 1} من ${steps.size}"; handleCommand(step) }, index * 3000L) }
+ }
  private fun refreshAppList() {
   val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
   installedApps = packageManager.queryIntentActivities(launcher, 0)
@@ -249,6 +290,7 @@ private data class AppEntry(val label: String, val packageName: String)
     OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
     OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("اعرف التطبيقات الموجودة على الموبايل") }
+    Text(if (recordingRoutine) "تسجيل روتين: $recordingName — قول خلص الروتين" else "الروتينات المحفوظة: ${savedRoutineNames.joinToString().ifBlank { "لا يوجد" }}", color = Color(0xFF70F0C0), fontSize = 11.sp)
     Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
      Text(screenText, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(8.dp), maxLines = 7)
