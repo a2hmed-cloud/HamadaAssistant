@@ -324,6 +324,18 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     val result = HamadaAccessibilityService.enterText(action.target, action.text)
     "كتابة في ${action.target}: " + when (result) { true -> "تم قبول طلب الكتابة"; false -> "لم أجد حقلًا مناسبًا"; null -> "خدمة إمكانية الوصول غير مفعلة" }
    }
+   "scroll" -> {
+    val direction = action.target.lowercase()
+    if (direction !in setOf("up", "down")) {
+     finishAgent("أوقفت التمرير لأن الاتجاه غير واضح.")
+     return
+    }
+    "تمرير الشاشة $direction: " + when (HamadaAccessibilityService.scroll(direction)) {
+     true -> "أندرويد قبل طلب التمرير"
+     false -> "تعذر تنفيذ إيماءة التمرير"
+     null -> "خدمة إمكانية الوصول غير مفعلة"
+    }
+   }
    "back" -> "رجوع: " + if (HamadaAccessibilityService.goBack() == true) "أندرويد قبل الطلب" else "تعذر الرجوع"
    "home" -> "الشاشة الرئيسية: " + if (HamadaAccessibilityService.goHome() == true) "أندرويد قبل الطلب" else "تعذر الانتقال"
    "finish" -> { finishAgent(action.text.ifBlank { action.reason.ifBlank { "المحرك أنهى المهمة، لكن يجب التحقق من النتيجة يدويًا." } }); return }
