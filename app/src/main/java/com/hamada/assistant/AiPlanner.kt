@@ -20,6 +20,7 @@ class AiPlanner {
         screen: String,
         appPackage: String,
         history: List<String>,
+        imageDataUrl: String = "",
         callback: (Result<AgentAction>) -> Unit
     ) {
         executor.execute {
@@ -32,20 +33,25 @@ class AiPlanner {
 الأدوات المسموحة: launch_app (target اسم التطبيق)، read_screen، click_text (target نص عنصر ظاهر)، enter_text (target اسم الحقل و text القيمة)، back، home، finish (text سبب الإنهاء).
 لا تخترع عناصر غير ظاهرة. إذا كانت الشاشة لا تدعم الهدف، جرّب خطوة آمنة بديلة أو أنهِ المهمة مع توضيح أن النجاح غير مؤكد.
 لا تنفذ شراء أو إرسال رسالة أو حذف أو مشاركة بيانات أو أي فعل حساس دون موافقة صريحة من المستخدم. لا تعتبر الضغط نجاحًا؛ افحص الملاحظة التالية. تجنب تكرار نفس الخطوة إذا فشلت. الحد الأقصى للخطوات يطبقه التطبيق."""
-                val user = JSONObject()
+                val userText = JSONObject()
                     .put("goal", goal)
                     .put("current_app_package", appPackage)
                     .put("visible_screen_text", screen.take(7000))
                     .put("recent_steps", JSONArray(history.takeLast(8)))
-                    .put("instruction", "أعد خطوة واحدة فقط كـ JSON.")
+                    .put("instruction", "أعد خطوة واحدة فقط كـ JSON. استخدم الصورة كدليل إضافي إذا كانت متاحة.")
                     .toString()
+                val userContent = if (imageDataUrl.startsWith("data:image/")) {
+                    JSONArray()
+                        .put(JSONObject().put("type", "text").put("text", userText))
+                        .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", imageDataUrl)))
+                } else userText
                 val payload = JSONObject()
                     .put("model", model)
                     .put("temperature", 0.1)
                     .put("max_tokens", 300)
                     .put("messages", JSONArray()
                         .put(JSONObject().put("role", "system").put("content", system))
-                        .put(JSONObject().put("role", "user").put("content", user)))
+                        .put(JSONObject().put("role", "user").put("content", userContent)))
                 val endpoint = baseUrl.trimEnd('/') + "/chat/completions"
                 val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
