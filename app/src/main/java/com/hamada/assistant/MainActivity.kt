@@ -48,6 +48,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var savedRoutineNames by mutableStateOf(listOf<String>())
  private val routineSteps = mutableListOf<String>()
  private val routineHandler = Handler(Looper.getMainLooper())
+ private var agentRunId = 0
+ private var agentRunning = false
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -177,6 +179,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
    c.startsWith("شغل روتين ") || c.startsWith("نفذ روتين ") -> {
     runRoutine(c.removePrefix("شغل روتين ").removePrefix("نفذ روتين ").trim())
    }
+   c.startsWith("شغل اغنيه ") || c.startsWith("شغل اغنية ") || c.startsWith("شغل لي اغنيه ") || c.startsWith("شغل لي اغنية ") -> {
+    val song = c.replaceFirst(Regex("^شغل( لي)? اغني[هة]\\s*"), "")
+     .replace(Regex("\\s+على سبوتيفاي$"), "").trim()
+    if (song.isBlank()) { status = "قول اسم الأغنية، زي شغل أغنية كذا على سبوتيفاي"; speak(status) }
+    else startSpotifyAgent(song)
+   }
    c.contains("اقرا") && (c.contains("شاشه") || c.contains("الشاشه")) -> {
     val captured = HamadaAccessibilityService.readLastExternalScreen()
     if (captured != null) {
@@ -236,6 +244,67 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
    }
   }
  }
+ private fun startSpotifyAgent(song: String) {
+  if (agentRunning) { status = "في مهمة شغالة بالفعل"; speak(status); return }
+  refreshAppList()
+  val spotify = installedApps.firstOrNull { it.packageName == "com.spotify.music" }
+  if (spotify == null) { status = "مش لاقي سبوتيفاي ضمن التطبيقات المتاحة. اتأكد إنه متثبت وافتح قائمة التطبيقات للتأكد."; speak(status); return }
+  agentRunId += 1
+  val runId = agentRunId
+  agentRunning = true
+  status = "الخطة: فتح سبوتيفاي، فتح البحث، كتابة $song، ثم اختيار النتيجة"
+  speak("هفتح سبوتيفاي وأبحث عن $song")
+  val launchIntent = packageManager.getLaunchIntentForPackage(spotify.packageName)
+  if (launchIntent == null) { finishAgent("مش قادر أفتح سبوتيفاي"); return }
+  try { startActivity(launchIntent) } catch (_: Exception) { finishAgent("فشل فتح سبوتيفاي"); return }
+  routineHandler.postDelayed({ if (agentRunId == runId && agentRunning) agentClickSearch(runId, song, 0) }, 5000L)
+ }
+
+ private fun agentClickSearch(runId: Int, song: String, attempt: Int) {
+  if (runId != agentRunId || !agentRunning) return
+  val clicked = HamadaAccessibilityService.clickText("بحث")
+  if (clicked == true) {
+   status = "فتحت البحث؛ بجهز كتابة اسم الأغنية"
+   routineHandler.postDelayed({ if (runId == agentRunId && agentRunning) agentEnterSong(runId, song, 0) }, 1800L)
+  } else if (attempt < 2) {
+   status = "بدور على زر البحث في سبوتيفاي، محاولة ${attempt + 1}"
+   routineHandler.postDelayed({ agentClickSearch(runId, song, attempt + 1) }, 1800L)
+  } else finishAgent("مش قادر أحدد زر البحث في سبوتيفاي. راجع إن عين حمادة مفعّلة وإن الشاشة ظاهرة.")
+ }
+
+ private fun agentEnterSong(runId: Int, song: String, attempt: Int) {
+  if (runId != agentRunId || !agentRunning) return
+  val entered = HamadaAccessibilityService.enterText("بحث", song)
+  if (entered == true) {
+   status = "كتبت اسم الأغنية؛ بستنى نتائج البحث"
+   routineHandler.postDelayed({ if (runId == agentRunId && agentRunning) agentChooseResult(runId, song, 0) }, 3500L)
+  } else if (attempt < 2) {
+   routineHandler.postDelayed({ agentEnterSong(runId, song, attempt + 1) }, 1600L)
+  } else finishAgent("فتحت البحث لكن ماقدرتش أكتب اسم الأغنية. بعض إصدارات التطبيقات بتمنع التحكم في حقل البحث.")
+ }
+
+ private fun agentChooseResult(runId: Int, song: String, attempt: Int) {
+  if (runId != agentRunId || !agentRunning) return
+  val screen = HamadaAccessibilityService.readCurrentScreen().orEmpty()
+  val match = screen.lineSequence().map { it.trim() }.firstOrNull { line ->
+   line.isNotBlank() && normalizeCommand(line).contains(normalizeCommand(song))
+  }
+  val target = match ?: song
+  val clicked = HamadaAccessibilityService.clickText(target)
+  if (clicked == true) {
+   finishAgent("ضغطت على نتيجة مطابقة لاسم الأغنية: $song. اتأكد من سبوتيفاي إن التشغيل بدأ فعلاً.")
+  } else if (attempt < 2) {
+   status = "بقرأ نتائج البحث وبحاول أحدد الأغنية"
+   routineHandler.postDelayed({ agentChooseResult(runId, song, attempt + 1) }, 2000L)
+  } else finishAgent("وصلت لنتائج البحث لكن ماقدرتش أحدد نتيجة الأغنية بشكل موثوق. هسيب الشاشة مفتوحة بدل ما أضغط على نتيجة غلط.")
+ }
+
+ private fun finishAgent(message: String) {
+  agentRunning = false
+  status = message
+  speak(message)
+ }
+
  private fun refreshRoutineNames() { savedRoutineNames = getSharedPreferences("hamada_routines", MODE_PRIVATE).all.keys.sorted() }
  private fun runRoutine(name: String) {
   val stored = getSharedPreferences("hamada_routines", MODE_PRIVATE).getString(name, null)
