@@ -142,6 +142,26 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
      speak("فعّل عين حمادة من إمكانية الوصول، افتح التطبيق اللي عايزني أقرأه، وبعدها ارجع وقول اقرأ الشاشة.")
     }
    }
+   c.contains("ارجع") || c.contains("رجوع") || c == "back" -> {
+    val result = HamadaAccessibilityService.goBack()
+    status = if (result == true) "رجعت خطوة" else "فعّل عين حمادة عشان أقدر أرجع"
+    speak(status)
+   }
+   c.contains("الشاشة الرئيسية") || c == "روح للرئيسية" || c == "home" -> {
+    val result = HamadaAccessibilityService.goHome()
+    status = if (result == true) "فتحت الشاشة الرئيسية" else "فعّل عين حمادة عشان أقدر أروح للرئيسية"
+    speak(status)
+   }
+   c.startsWith("اضغط على ") || c.startsWith("دوس على ") || c.startsWith("اكبس على ") -> {
+    val target = c.removePrefix("اضغط على ").removePrefix("دوس على ").removePrefix("اكبس على ").removePrefix("زر ").trim()
+    val result = HamadaAccessibilityService.clickText(target)
+    status = when (result) {
+     true -> "نفذت محاولة الضغط على $target"
+     false -> "مش لاقي عنصر ظاهر اسمه $target"
+     null -> "فعّل عين حمادة من إعدادات إمكانية الوصول الأول"
+    }
+    speak(status)
+   }
    c.contains("افتح") && (c.contains("يوتيوب") || c.contains("youtube")) -> launchPackage("com.google.android.youtube","حاضر، بفتح يوتيوب.")
    c.contains("افتح") && (c.contains("واتساب") || c.contains("whatsapp")) -> launchPackage("com.whatsapp","حاضر، بفتح واتساب.")
    c.contains("افتح") && (c.contains("سبوتيفاي") || c.contains("spotify")) -> launchPackage("com.spotify.music","حاضر، بفتح سبوتيفاي.")
