@@ -12,6 +12,8 @@ class HamadaAccessibilityService : AccessibilityService() {
   fun readCurrentScreen(): String? = activeService?.readVisibleText()
   fun readLastExternalScreen(): String? = lastExternalScreen.takeIf { it.isNotBlank() }
   fun lastExternalApp(): String = lastExternalPackage
+  fun goBack(): Boolean? = activeService?.performGlobalAction(GLOBAL_ACTION_BACK)
+  fun goHome(): Boolean? = activeService?.performGlobalAction(GLOBAL_ACTION_HOME)
   fun clickText(target: String): Boolean? {
    val service = activeService ?: return null
    if (target.isBlank()) return false
@@ -27,10 +29,11 @@ class HamadaAccessibilityService : AccessibilityService() {
   super.onDestroy()
  }
  override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-  val pkg = event?.packageName?.toString().orEmpty()
+  val currentEvent = event ?: return
+  val pkg = currentEvent.packageName?.toString().orEmpty()
   if (pkg.isBlank() || pkg == packageName) return
-  if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-      event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+  if (currentEvent.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+      currentEvent.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
    val root = rootInActiveWindow ?: return
    val out = StringBuilder()
    collectText(root, out)
