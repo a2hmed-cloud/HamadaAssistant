@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private var listening by mutableStateOf(false)
  private var screenText by mutableStateOf("لسه ما قريناش الشاشة.")
  private var clickTarget by mutableStateOf("")
+ private var showApps by mutableStateOf(false)
+ private var installedApps by mutableStateOf(listOf<AppEntry>())
 
  private val askMic = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
   if (granted) startListening() else { status = "إذن الميكروفون مرفوض"; speak("لازم تسمح لحمادة باستخدام الميكروفون.") }
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   tts = TextToSpeech(this, this)
+  refreshAppList()
   if (SpeechRecognizer.isRecognitionAvailable(this)) {
    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
@@ -90,7 +93,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }, { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
      { screenText = HamadaAccessibilityService.readCurrentScreen() ?: "فعّل خدمة حمادة من إعدادات إمكانية الوصول، وبعدها ارجع واضغط اقرأ الشاشة." ; status = if (HamadaAccessibilityService.readCurrentScreen() == null) "خدمة التحكم بالشاشة مش مفعّلة" else "تم جلب نص الشاشة" ; speak(screenText.take(250)) },
      { target -> val result = HamadaAccessibilityService.clickText(target); status = when (result) { true -> "حاولت أضغط على: $target"; false -> "ملقتش زر قابل للضغط اسمه: $target"; null -> "فعّل خدمة حمادة من إعدادات إمكانية الوصول الأول" }; speak(status) },
-     screenText, clickTarget, { clickTarget = it })
+     screenText, clickTarget, { clickTarget = it },
+     { refreshAppList(); showApps = true }, installedApps, showApps, { showApps = it })
    }
   }
  }
@@ -181,12 +185,15 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
      speak(status)
     }
    }
-   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("يوتيوب") || c.contains("youtube")) ->
-    launchPackage("com.google.android.youtube", "حاضر، بفتح يوتيوب.")
-   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("واتساب") || c.contains("whatsapp")) ->
-    launchPackage("com.whatsapp", "حاضر، بفتح واتساب.")
-   (c.contains("افتح") || c.startsWith("شغل") || c.startsWith("روح")) && (c.contains("سبوتيفاي") || c.contains("spotify")) ->
-    launchPackage("com.spotify.music", "حاضر، بفتح سبوتيفاي.")
+   c.startsWith("افتح ") || c.startsWith("شغل ") || c.startsWith("روح ") -> {
+    val requested = c.removePrefix("افتح ").removePrefix("شغل ").removePrefix("روح ").trim()
+    val app = installedApps.firstOrNull { normalizeCommand(it.label).contains(requested) || requested.contains(normalizeCommand(it.label)) }
+    if (app == null) {
+     refreshAppList()
+     val match = installedApps.firstOrNull { normalizeCommand(it.label).contains(requested) || requested.contains(normalizeCommand(it.label)) }
+     if (match != null) launchDiscoveredApp(match) else { status = "مش لاقي تطبيق اسمه $requested"; speak(status) }
+    } else launchDiscoveredApp(app)
+   }
    c.contains("اعدادات") || c.contains("الاعدادات") -> {
     status = "بفتح إعدادات أندرويد"
     speak(status)
@@ -198,6 +205,19 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
    }
   }
  }
+ private fun refreshAppList() {
+  val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+  installedApps = packageManager.queryIntentActivities(launcher, 0)
+   .map { AppEntry(it.loadLabel(packageManager).toString(), it.activityInfo.packageName) }
+   .distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+ }
+ private fun launchDiscoveredApp(app: AppEntry) {
+  val intent = packageManager.getLaunchIntentForPackage(app.packageName)
+  if (intent == null) { status = "التطبيق ملوش شاشة تشغيل مباشرة"; speak(status); return }
+  status = "بحاول أفتح ${app.label}"
+  speak(status)
+  try { startActivity(intent) } catch (_: Exception) { status = "ماقدرتش أفتح ${app.label}"; speak(status) }
+ }
  private fun launchPackage(pkg: String, message: String) {
   val i = packageManager.getLaunchIntentForPackage(pkg)
   if (i != null) { status = message; speak(message); startActivity(i) }
@@ -207,7 +227,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  override fun onDestroy() { speechRecognizer?.destroy(); tts?.stop(); tts?.shutdown(); super.onDestroy() }
 }
 
-@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit) {
+private data class AppEntry(val label: String, val packageName: String)
+
+@Composable private fun HamadaScreen(speech: String, status: String, listening: Boolean, onListen: () -> Unit, onAccessibility: () -> Unit, onReadScreen: () -> Unit, onClickText: (String) -> Unit, screenText: String, clickTarget: String, onClickTargetChange: (String) -> Unit, onShowApps: () -> Unit, installedApps: List<AppEntry>, showApps: Boolean, setShowApps: (Boolean) -> Unit) {
  val bg = Brush.verticalGradient(listOf(Color(0xFF020817), Color(0xFF07152D), Color(0xFF02040A)))
  Surface(Modifier.fillMaxSize(), color = Color(0xFF020817)) {
   Row(Modifier.fillMaxSize().background(bg).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -226,6 +248,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
     OutlinedTextField(value = clickTarget, onValueChange = onClickTargetChange, label = { Text("اسم الزر الظاهر") }, placeholder = { Text("مثال: بحث") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedButton(onClick = { onClickText(clickTarget) }, enabled = clickTarget.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("اضغط على الاسم") }
+    OutlinedButton(onClick = onShowApps, modifier = Modifier.fillMaxWidth()) { Text("اعرف التطبيقات الموجودة على الموبايل") }
     Text("النص المقروء:", color = Color(0xFF66C7FF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
     Surface(color = Color(0xFF0A1A31), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 105.dp)) {
      Text(screenText, color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(8.dp), maxLines = 7)
@@ -239,6 +262,13 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     QuickItem("افتح الإعدادات")
     Text("الإصدار 0.2", color = Color.Gray, fontSize = 11.sp)
    }
+  }
+  if (showApps) {
+   AlertDialog(onDismissRequest = { setShowApps(false) }, title = { Text("التطبيقات المتاحة على الجهاز (${installedApps.size})") }, text = {
+    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+     installedApps.forEach { app -> Text("${app.label} · ${app.packageName}", color = Color.White, modifier = Modifier.padding(vertical = 5.dp)) }
+    }
+   }, confirmButton = { TextButton(onClick = { setShowApps(false) }) { Text("إغلاق") } })
   }
  }
 }
