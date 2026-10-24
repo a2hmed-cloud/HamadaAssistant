@@ -5,6 +5,23 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 class HamadaAccessibilityService : AccessibilityService() {
+ companion object {
+  @Volatile private var activeService: HamadaAccessibilityService? = null
+  fun readCurrentScreen(): String? = activeService?.readVisibleText()
+  fun clickText(target: String): Boolean? {
+   val service = activeService ?: return null
+   if (target.isBlank()) return false
+   return service.clickVisibleText(target)
+  }
+ }
+ override fun onServiceConnected() {
+  super.onServiceConnected()
+  activeService = this
+ }
+ override fun onDestroy() {
+  if (activeService === this) activeService = null
+  super.onDestroy()
+ }
  override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
  override fun onInterrupt() {}
  fun readVisibleText(): String {
@@ -16,7 +33,7 @@ class HamadaAccessibilityService : AccessibilityService() {
   if (node == null) return
   val text = node.text?.toString()?.trim().orEmpty()
   val desc = node.contentDescription?.toString()?.trim().orEmpty()
-  if (text.isNotBlank()) out.append(text).append("\\n") else if (desc.isNotBlank()) out.append(desc).append("\\n")
+  if (text.isNotBlank()) out.append(text).append("\n") else if (desc.isNotBlank()) out.append(desc).append("\n")
   for (i in 0 until node.childCount) collectText(node.getChild(i), out)
  }
  fun clickVisibleText(target: String): Boolean {
