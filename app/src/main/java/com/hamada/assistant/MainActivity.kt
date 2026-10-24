@@ -50,6 +50,10 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
  private val routineHandler = Handler(Looper.getMainLooper())
  private var agentRunId = 0
  private var agentRunning = false
+ private val aiPlanner = AiPlanner()
+ private var aiGoal = ""
+ private var aiStepCount = 0
+ private val aiHistory = mutableListOf<String>()
  private var showAiSettings by mutableStateOf(false)
  private var apiBaseUrl by mutableStateOf("")
  private var apiKey by mutableStateOf("")
@@ -179,6 +183,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
    return
   }
   when {
+   c == "وقف المهمه" || c == "وقف المهمة" || c == "الغاء المهمه" || c == "إلغاء المهمة" -> {
+    agentRunId++
+    agentRunning = false
+    status = "وقفت المهمة الحالية."
+    speak(status)
+   }
    c.startsWith("احفظ روتين ") || c.startsWith("سجل روتين ") -> {
     recordingName = c.removePrefix("احفظ روتين ").removePrefix("سجل روتين ").trim()
     if (recordingName.isBlank()) { status = "قول اسم الروتين"; speak(status) }
@@ -246,12 +256,87 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     speak(status)
     startActivity(Intent(Settings.ACTION_SETTINGS))
    }
-   else -> {
-    status = "فهمت الكلام، لكن الأمر ده مش مدعوم لسه"
-    speak("فهمت كلامك، بس لسه ما ضفتش تنفيذ الأمر ده. جرب افتح يوتيوب، ارجع، أو اضغط على بحث.")
+   else -> startAiAgent(raw)
+  }
+ }
+
+ private fun startAiAgent(goal: String) {
+  if (agentRunning) { status = "في مهمة شغالة بالفعل؛ قول وقف المهمة الأول"; speak(status); return }
+  val prefs = getSharedPreferences("hamada_ai", MODE_PRIVATE)
+  val base = prefs.getString("base_url", "https://api.openai.com/v1").orEmpty()
+  val key = prefs.getString("api_key", "").orEmpty()
+  val model = prefs.getString("model", "gpt-4o-mini").orEmpty()
+  if (key.isBlank()) {
+   status = "قبل ما أنفذ طلبات عامة، افتح إعدادات عقل الذكاء الاصطناعي وأدخل API Key واسم الموديل."
+   speak(status)
+   showAiSettings = true
+   return
+  }
+  agentRunId += 1
+  agentRunning = true
+  aiGoal = goal
+  aiStepCount = 0
+  aiHistory.clear()
+  status = "بدأت أفهم طلبك وأجهز أول خطوة..."
+  speak("هحلل طلبك وأبدأ خطوة خطوة، وهراجع النتيجة بعد كل خطوة.")
+  requestNextAiAction(agentRunId, base, key, model, "")
+ }
+
+ private fun requestNextAiAction(runId: Int, base: String, key: String, model: String, observation: String) {
+  if (runId != agentRunId || !agentRunning) return
+  if (aiStepCount >= 8) { finishAgent("وقفت بعد 8 خطوات كحد أمان. المهمة لم تُعتبر ناجحة؛ راجع النتيجة على الشاشة."); return }
+  val screen = HamadaAccessibilityService.readCurrentScreen().orEmpty()
+  status = "المحرك بيخطط للخطوة ${aiStepCount + 1} من 8..."
+  aiPlanner.nextAction(base, key, model, aiGoal, if (observation.isBlank()) screen else observation + "\n\nالشاشة الحالية:\n" + screen, HamadaAccessibilityService.lastExternalApp(), aiHistory.toList()) { result ->
+   runOnUiThread {
+    if (runId != agentRunId || !agentRunning) return@runOnUiThread
+    result.onFailure { error -> finishAgent("محرك الذكاء الاصطناعي فشل: ${error.message ?: "خطأ غير معروف"}. لم أعتبر المهمة ناجحة.") }
+    result.onSuccess { action -> executeAiAction(runId, base, key, model, action, screen) }
    }
   }
  }
+
+ private fun executeAiAction(runId: Int, base: String, key: String, model: String, action: AgentAction, beforeScreen: String) {
+  if (runId != agentRunId || !agentRunning) return
+  aiStepCount++
+  val description = when (action.tool) {
+   "launch_app" -> {
+    val wanted = normalizeCommand(action.target)
+    val app = installedApps.firstOrNull { normalizeCommand(it.label).contains(wanted) || wanted.contains(normalizeCommand(it.label)) }
+    if (app == null) { "فشل فتح التطبيق: مش لاقي ${action.target}" }
+    else { launchDiscoveredApp(app); "طلب فتح التطبيق ${app.label}" }
+   }
+   "read_screen" -> "قراءة الشاشة"
+   "click_text" -> {
+    val risky = listOf("حذف", "مسح", "شراء", "دفع", "ارسال", "إرسال", "send", "delete", "pay", "buy", "confirm", "تأكيد", "نشر", "publish")
+    if (risky.any { normalizeCommand(action.target).contains(normalizeCommand(it)) }) {
+     finishAgent("المحرك طلب ضغطًا قد يرسل أو يحذف أو يؤكد إجراءً حساسًا (${action.target}). أوقفت التنفيذ لحين موافقتك الصريحة.")
+     return
+    }
+    val result = HamadaAccessibilityService.clickText(action.target)
+    "ضغط ${action.target}: " + when (result) { true -> "أندرويد قبل طلب الضغط"; false -> "العنصر غير موجود"; null -> "خدمة إمكانية الوصول غير مفعلة" }
+   }
+   "enter_text" -> {
+    if (action.text.length > 500) { finishAgent("أوقفت الكتابة لأن النص أطول من الحد المسموح."); return }
+    val result = HamadaAccessibilityService.enterText(action.target, action.text)
+    "كتابة في ${action.target}: " + when (result) { true -> "تم قبول طلب الكتابة"; false -> "لم أجد حقلًا مناسبًا"; null -> "خدمة إمكانية الوصول غير مفعلة" }
+   }
+   "back" -> "رجوع: " + if (HamadaAccessibilityService.goBack() == true) "أندرويد قبل الطلب" else "تعذر الرجوع"
+   "home" -> "الشاشة الرئيسية: " + if (HamadaAccessibilityService.goHome() == true) "أندرويد قبل الطلب" else "تعذر الانتقال"
+   "finish" -> { finishAgent(action.text.ifBlank { action.reason.ifBlank { "المحرك أنهى المهمة، لكن يجب التحقق من النتيجة يدويًا." } }); return }
+   else -> { finishAgent("أوقفت التنفيذ لأن الأداة غير معروفة."); return }
+  }
+  aiHistory.add("خطوة $aiStepCount: ${action.tool} target=${action.target} text=${action.text.take(100)} | النتيجة الأولية: $description")
+  status = "$description — بفحص الشاشة بعد التنفيذ"
+  routineHandler.postDelayed({
+   if (runId != agentRunId || !agentRunning) return@postDelayed
+   val after = HamadaAccessibilityService.readCurrentScreen().orEmpty()
+   val changed = after.isNotBlank() && after != beforeScreen
+   aiHistory.add("التحقق بعد الخطوة $aiStepCount: الشاشة ${if (changed) "اتغيرت" else "لم يتأكد تغيرها"}؛ النص: ${after.take(1200)}")
+   requestNextAiAction(runId, base, key, model, "نتيجة الخطوة السابقة: $description. هل تغيرت الشاشة؟ $changed")
+  }, 1400L)
+ }
+
  private fun startSpotifyAgent(song: String) {
   if (agentRunning) { status = "في مهمة شغالة بالفعل"; speak(status); return }
   refreshAppList()
